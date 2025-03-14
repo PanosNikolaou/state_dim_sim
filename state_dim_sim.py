@@ -22,14 +22,29 @@ class StateDimensionSimulator:
     def evolve_state(self):
         for t in range(1, self.timesteps):
             for x in range(1, self.space_points - 1):
-                interference = np.sin(2 * np.pi * self.states[t - 1, x]) + np.cos(2 * np.pi * self.states[t - 1, x])
-                noise = np.random.normal(0, self.gamma)
-                non_linear_effect = self.beta * self.states[t - 1, x] ** 3 - (self.beta / 2) * self.states[
-                    t - 1, x] ** 2
-                chaotic_term = self.delta * np.sin(self.states[t - 1, x] * np.pi)
+                prev_state = self.states[t - 1, x]
 
-                self.states[t, x] = (0.5 * (self.states[t - 1, x - 1] + self.states[t - 1, x + 1])
-                                     + self.alpha * interference + noise + non_linear_effect + chaotic_term)
+                # Prevent values from exploding
+                prev_state = np.clip(prev_state, -1e3, 1e3)  # Limit range to avoid overflows
+
+                # Compute interference
+                interference = np.sin(2 * np.pi * prev_state) + np.cos(2 * np.pi * prev_state)
+
+                # Apply noise with safe handling
+                noise = np.random.normal(0, self.gamma)
+
+                # Non-linearity with overflow protection
+                non_linear_effect = self.beta * prev_state ** 3 - (self.beta / 2) * prev_state ** 2
+                non_linear_effect = np.clip(non_linear_effect, -1e3, 1e3)  # Limit range
+
+                # Chaotic term
+                chaotic_term = self.delta * np.sin(prev_state * np.pi)
+
+                # Compute next state safely
+                self.states[t, x] = np.nan_to_num(0.5 * (self.states[t - 1, x - 1] + self.states[t - 1, x + 1])
+                                                  + self.alpha * interference + noise + non_linear_effect + chaotic_term,
+                                                  nan=0.0, posinf=1e3, neginf=-1e3)
+
         return self.states
 
     def plot_heatmap(self):
@@ -38,7 +53,8 @@ class StateDimensionSimulator:
         plt.xlabel("Spatial Position")
         plt.ylabel("State Snapshot (S)")
         plt.title("Heatmap of State Evolution")
-        plt.show()
+        plt.draw()  # Non-blocking alternative
+        plt.pause(0.01)  # Allows Tkinter to update
 
     def plot_3d(self):
         fig = plt.figure(figsize=(8, 6))
@@ -49,7 +65,8 @@ class StateDimensionSimulator:
         ax.set_ylabel("State Index (S)")
         ax.set_zlabel("State Value")
         ax.set_title("3D Visualization of State Evolution")
-        plt.show()
+        plt.draw()  # Non-blocking alternative
+        plt.pause(0.01)  # Allows Tkinter to update
 
     def compute_lyapunov_exponent(self):
         """Estimate Lyapunov exponent to measure chaos in the system."""
