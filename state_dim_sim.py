@@ -110,6 +110,59 @@ class StateDimensionSimulator:
         self.states = np.array(results["states"])
         print(f"Results loaded from {filename}")
 
+    # def compute_lyapunov_exponent(self):
+    #     """Estimate Lyapunov exponent to measure chaos in the system."""
+    #     diffs = np.abs(np.diff(self.states, axis=0))
+    #     avg_growth = np.mean(np.log(1 + diffs + 1e-10))  # Avoid log(0) issues
+    #     return avg_growth
+
+    def analyze_stability(self):
+        """Analyze if the system is stable based on parameter values."""
+        max_value = np.max(np.abs(self.states))
+        stability_status = "Stable" if max_value < 1e3 else "Unstable"
+        return stability_status, max_value
+
+    def compare_with_classical_wave(self):
+        """Compare the (4+1)D model with a classical wave equation."""
+        classical_states = np.zeros((self.timesteps, self.space_points))
+        classical_states[0, self.space_points // 2] = 1  # Initial disturbance
+
+        for t in range(1, self.timesteps - 1):
+            for x in range(1, self.space_points - 1):
+                classical_states[t + 1, x] = 2 * classical_states[t, x] - classical_states[t - 1, x] + self.alpha * (
+                        classical_states[t, x - 1] - 2 * classical_states[t, x] + classical_states[t, x + 1]
+                )
+
+        difference = np.abs(self.states - classical_states)
+
+        plt.figure(figsize=(8, 6))
+        plt.imshow(classical_states, cmap="coolwarm", aspect='auto', origin='lower')
+        plt.colorbar(label="State Value")
+        plt.xlabel("Spatial Position")
+        plt.ylabel("Time Step")
+        plt.title("Classical Wave Evolution (No Non-Linearity)")
+        plt.show()
+
+        plt.figure(figsize=(8, 6))
+        plt.imshow(difference, cmap="inferno", aspect='auto', origin='lower')
+        plt.colorbar(label="Difference Magnitude")
+        plt.xlabel("Spatial Position")
+        plt.ylabel("Time Step")
+        plt.title("Difference: (4+1)D Model vs Classical Wave")
+        plt.show()
+
+        total_difference = np.sum(difference, axis=1)
+        plt.figure(figsize=(8, 5))
+        plt.plot(range(self.timesteps), total_difference, label="Total Deviation")
+        plt.xlabel("Time Step")
+        plt.ylabel("Deviation Magnitude")
+        plt.title("Deviation of (4+1)D Model from Classical Wave Mechanics")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+        return total_difference[-1]
+
 
 # GUI for interactive parameter tuning
 def run_gui():
@@ -127,6 +180,10 @@ def run_gui():
         sim.plot_3d()
         lyapunov_exp = sim.compute_lyapunov_exponent()
         print(f"Estimated Lyapunov Exponent: {lyapunov_exp}")
+        stability_status, max_value = sim.analyze_stability()
+        deviation = sim.compare_with_classical_wave()
+        print(f"Stability Status: {stability_status} (Max Value: {max_value})")
+        print(f"Final Total Deviation from Classical Wave Model: {deviation}")
         sim.save_results()
         sim.save_to_csv()
 
