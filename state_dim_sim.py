@@ -20,30 +20,50 @@ class StateDimensionSimulator:
         self.states[0, space_points // 2] = 1  # Initial wave disturbance
 
     def evolve_state(self):
+        """Extended model with diffusion, external forcing, memory, and adaptive parameters."""
+        history = np.copy(self.states)  # Store past states for memory effects
+
         for t in range(1, self.timesteps):
-            for x in range(1, self.space_points - 1):
+            for x in range(2, self.space_points - 2):  # Extend neighborhood
+
                 prev_state = self.states[t - 1, x]
+                prev_state = np.clip(prev_state, -1e3, 1e3)  # Prevent overflow
 
-                # Prevent values from exploding
-                prev_state = np.clip(prev_state, -1e3, 1e3)  # Limit range to avoid overflows
+                # Higher-order diffusion (Laplacian-like term)
+                diffusion = (
+                        -0.5 * self.states[t - 1, x - 2]
+                        + self.states[t - 1, x - 1]
+                        - 2 * prev_state
+                        + self.states[t - 1, x + 1]
+                        - 0.5 * self.states[t - 1, x + 2]
+                )
 
-                # Compute interference
-                interference = np.sin(2 * np.pi * prev_state) + np.cos(2 * np.pi * prev_state)
+                # External periodic forcing
+                forcing = 0.1 * np.sin(0.1 * np.pi * t) * np.cos(0.05 * np.pi * x)
 
-                # Apply noise with safe handling
+                # Memory effect (delayed response)
+                memory_effect = 0.2 * (history[max(0, t - 3), x] - prev_state)
+
+                # Adaptive non-linearity (parameters depend on state)
+                beta_t = self.beta * (1 + 0.1 * np.sin(prev_state))
+                non_linear_effect = beta_t * prev_state ** 3 - (beta_t / 2) * prev_state ** 2
+
+                # Chaotic term with adaptive delta
+                delta_t = self.delta * (1 + 0.05 * np.cos(t))
+                chaotic_term = delta_t * np.sin(prev_state * np.pi)
+
+                # Noise term (random fluctuations)
                 noise = np.random.normal(0, self.gamma)
 
-                # Non-linearity with overflow protection
-                non_linear_effect = self.beta * prev_state ** 3 - (self.beta / 2) * prev_state ** 2
-                non_linear_effect = np.clip(non_linear_effect, -1e3, 1e3)  # Limit range
+                # Update state
+                self.states[t, x] = np.nan_to_num(
+                    prev_state + self.alpha * diffusion + forcing + memory_effect
+                    + non_linear_effect + chaotic_term + noise,
+                    nan=0.0, posinf=1e3, neginf=-1e3
+                )
 
-                # Chaotic term
-                chaotic_term = self.delta * np.sin(prev_state * np.pi)
-
-                # Compute next state safely
-                self.states[t, x] = np.nan_to_num(0.5 * (self.states[t - 1, x - 1] + self.states[t - 1, x + 1])
-                                                  + self.alpha * interference + noise + non_linear_effect + chaotic_term,
-                                                  nan=0.0, posinf=1e3, neginf=-1e3)
+            # Store history for memory effects
+            history[t, :] = self.states[t, :]
 
         return self.states
 
